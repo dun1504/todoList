@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import {
   MdDelete,
@@ -8,6 +8,7 @@ import {
   MdEdit,
   MdSave,
 } from "react-icons/md";
+import Sortable from 'sortablejs'; // Import Sortable from sortablejs
 
 const API_URL = "https://669f913eb132e2c136fe5b3c.mockapi.io/todo";
 
@@ -22,6 +23,8 @@ const TodoList = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [todosPerPage] = useState(5); // Số lượng todo trên mỗi trang
 
+  const sortableRef = useRef(null);
+
   useEffect(() => {
     fetchTodos();
   }, []);
@@ -30,10 +33,35 @@ const TodoList = () => {
     filterTodos();
   }, [todos, filter, searchTerm]);
 
+  useEffect(() => {
+    if (sortableRef.current) {
+      Sortable.create(sortableRef.current, {
+        animation: 350,
+        chosenClass: "sortable-chosen",
+        dragClass: "sortable-drag",
+        onEnd: (event) => {
+          const movedTodo = todos[event.oldIndex];
+          if (movedTodo) {
+            const newOrder = Array.from(todos);
+            newOrder.splice(event.oldIndex, 1);
+            newOrder.splice(event.newIndex, 0, movedTodo);
+            setTodos(newOrder);
+          } else {
+            console.error("Moved todo is undefined.");
+          }
+        },
+      });
+    }
+  }, [todos]);
+
   const fetchTodos = async () => {
     try {
       const response = await axios.get(API_URL);
-      setTodos(response.data);
+      if (Array.isArray(response.data)) {
+        setTodos(response.data);
+      } else {
+        console.error("API response is not an array.");
+      }
     } catch (error) {
       console.error("Error fetching todos: ", error);
     }
@@ -63,6 +91,10 @@ const TodoList = () => {
   };
 
   const toggleComplete = async (id, completed) => {
+    if (typeof completed === 'undefined') {
+      console.error("Completed status is undefined.");
+      return;
+    }
     try {
       await axios.put(`${API_URL}/${id}`, { completed: !completed });
       const updatedTodos = todos.map((todo) =>
@@ -202,81 +234,87 @@ const TodoList = () => {
           </button>
         </div>
       </div>
-      <ul>
+      <ul ref={sortableRef} id="drop-items">
         {currentTodos.length > 0 ? (
-          currentTodos.map((todo, index) => (
-            <li
-              key={todo.id}
-              className="flex items-center justify-between mb-2 border-b-2"
-            >
-              <div className="flex items-center">
-                <span className="mr-4 text-gray-500">
-                  {indexOfFirstTodo + index + 1}.
-                </span>
-                {editingTodo === todo ? (
-                  <>
-                    <input
-                      type="text"
-                      className="border-gray-300 border rounded-lg mb-2 px-2 py-1 mr-2"
-                      value={editText}
-                      onChange={handleEditChange}
-                    />
-
-                    <MdSave
-                      size={22}
-                      className="bg-gray-500 text-white mb-2 p-[2px] rounded-md"
-                      onClick={saveEdit}
-                    />
-
-                    <MdClear
-                      size={22}
-                      className="bg-gray-500 text-white mb-2 p-[2px] rounded-md ml-2"
-                      onClick={cancelEdit}
-                    />
-                  </>
-                ) : (
-                  <span
-                    className={`my-2 text-sm italic ${
-                      todo.completed ? "line-through" : ""
-                    }`}
-                  >
-                    {todo.title}
+          currentTodos.map((todo, index) => {
+            if (!todo) {
+              console.error("Todo is undefined.");
+              return null;
+            }
+            return (
+              <li
+                key={todo.id}
+                className="flex items-center justify-between mb-2 border-b-2"
+              >
+                <div className="flex items-center">
+                  <span className="mr-4 text-gray-500">
+                    {indexOfFirstTodo + index + 1}.
                   </span>
-                )}
-              </div>
-              <div className="flex gap-2">
-                {editingTodo !== todo && (
-                  <>
-                    {todo.completed ? (
+                  {editingTodo === todo ? (
+                    <>
+                      <input
+                        type="text"
+                        className="border-gray-300 border rounded-lg mb-2 px-2 py-1 mr-2"
+                        value={editText}
+                        onChange={handleEditChange}
+                      />
+
+                      <MdSave
+                        size={22}
+                        className="bg-gray-500 text-white mb-2 p-[2px] rounded-md"
+                        onClick={saveEdit}
+                      />
+
                       <MdClear
                         size={22}
-                        className="ml-2 p-1 text-gray-600 bg-gray-300 rounded-md cursor-pointer"
-                        onClick={() => toggleComplete(todo.id, todo.completed)}
+                        className="bg-gray-500 text-white mb-2 p-[2px] rounded-md ml-2"
+                        onClick={cancelEdit}
                       />
-                    ) : (
-                      <MdDone
+                    </>
+                  ) : (
+                    <span
+                      className={`my-2 text-sm italic ${
+                        todo.completed ? "line-through" : ""
+                      }`}
+                    >
+                      {todo.title}
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  {editingTodo !== todo && (
+                    <>
+                      {todo.completed ? (
+                        <MdClear
+                          size={22}
+                          className="ml-2 p-1 text-gray-600 bg-gray-300 rounded-md cursor-pointer"
+                          onClick={() => toggleComplete(todo.id, todo.completed)}
+                        />
+                      ) : (
+                        <MdDone
+                          size={22}
+                          className="ml-2 p-1 text-gray-600 bg-gray-300 rounded-md cursor-pointer"
+                          onClick={() => toggleComplete(todo.id, todo.completed)}
+                        />
+                      )}
+                      <MdEdit
                         size={22}
                         className="ml-2 p-1 text-gray-600 bg-gray-300 rounded-md cursor-pointer"
-                        onClick={() => toggleComplete(todo.id, todo.completed)}
+                        onClick={() => handleEdit(todo)}
                       />
-                    )}
-                    <MdEdit
-                      size={22}
-                      className="ml-2 p-1 text-gray-600 bg-gray-300 rounded-md cursor-pointer"
-                      onClick={() => handleEdit(todo)}
-                    />
-                  </>
-                )}
-                <MdDelete
-                  size={22}
-                  className="text-gray-600 cursor-pointer p-1 rounded-md bg-gray-300"
-                  onClick={() => deleteTodo(todo.id)}
-                />
-              </div>
-            </li>
-          ))
+                    </>
+                  )}
+                  <MdDelete
+                    size={22}
+                    className="text-gray-600 cursor-pointer p-1 rounded-md bg-gray-300"
+                    onClick={() => deleteTodo(todo.id)}
+                  />
+                </div>
+              </li>
+            );
+          })
         ) : (
-          <p>No todos found.</p>
+          <p className='my-2 text-sm italic'>No todos found.</p>
         )}
       </ul>
 
