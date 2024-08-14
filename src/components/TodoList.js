@@ -8,7 +8,7 @@ import {
   MdEdit,
   MdSave,
 } from "react-icons/md";
-import Sortable from 'sortablejs'; // Import Sortable from sortablejs
+import Sortable from "sortablejs";
 
 const API_URL = "https://669f913eb132e2c136fe5b3c.mockapi.io/todo";
 
@@ -22,6 +22,8 @@ const TodoList = () => {
   const [filter, setFilter] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const [todosPerPage] = useState(5); // Số lượng todo trên mỗi trang
+  const [selectedTodos, setSelectedTodos] = useState([]);
+  const [selectAll, setSelectAll] = useState(false);
 
   const sortableRef = useRef(null);
 
@@ -90,8 +92,24 @@ const TodoList = () => {
     }
   };
 
+  const deleteSelectedTodos = async () => {
+    try {
+      const deletePromises = selectedTodos.map((id) =>
+        axios.delete(`${API_URL}/${id}`)
+      );
+      await Promise.all(deletePromises);
+      const updatedTodos = todos.filter(
+        (todo) => !selectedTodos.includes(todo.id)
+      );
+      setTodos(updatedTodos);
+      setSelectedTodos([]);
+    } catch (error) {
+      console.error("Error deleting selected todos: ", error);
+    }
+  };
+
   const toggleComplete = async (id, completed) => {
-    if (typeof completed === 'undefined') {
+    if (typeof completed === "undefined") {
       console.error("Completed status is undefined.");
       return;
     }
@@ -157,6 +175,24 @@ const TodoList = () => {
     setFilter(e.target.value);
   };
 
+  const handleSelectAll = (e) => {
+    const checked = e.target.checked;
+    setSelectAll(checked);
+    setSelectedTodos(checked ? filteredTodos.map((todo) => todo.id) : []);
+  };
+
+  const handleTodoSelect = (id) => {
+    setSelectedTodos((prevSelectedTodos) => {
+      const newSelectedTodos = new Set(prevSelectedTodos);
+      if (newSelectedTodos.has(id)) {
+        newSelectedTodos.delete(id);
+      } else {
+        newSelectedTodos.add(id);
+      }
+      return Array.from(newSelectedTodos);
+    });
+  };
+
   // Logic cho phân trang
   const indexOfLastTodo = currentPage * todosPerPage;
   const indexOfFirstTodo = indexOfLastTodo - todosPerPage;
@@ -173,7 +209,7 @@ const TodoList = () => {
         <input
           type="text"
           className="border-gray-300 border rounded-lg px-3 py-2 mr-2 w-full"
-          placeholder="Add new todo..."
+          placeholder="Thêm công việc..."
           value={newTodo}
           onChange={(e) => setNewTodo(e.target.value)}
         />
@@ -191,9 +227,9 @@ const TodoList = () => {
             value={filter}
             onChange={handleFilterChange}
           >
-            <option value="ALL">Default</option>
-            <option value="COMPLETED">Completed</option>
-            <option value="INCOMPLETE">Incomplete</option>
+            <option value="ALL">Tất cả</option>
+            <option value="COMPLETED">Hoàn Thành</option>
+            <option value="INCOMPLETE">Chưa hoàn thành</option>
           </select>
 
           <button
@@ -209,14 +245,14 @@ const TodoList = () => {
               }
             }}
           >
-            Mark All Completed
+            Hoàn thành tất cả
           </button>
         </div>
         <div className="flex items-center mb-4">
           <input
             className="flex-grow p-2 border-b-2 border-gray-300 focus:outline-none focus:border-blue-500"
             type="text"
-            placeholder="Search Todos"
+            placeholder="Tìm kiếm..."
             value={searchTerm}
             onChange={handleSearchChange}
           />
@@ -234,105 +270,121 @@ const TodoList = () => {
           </button>
         </div>
       </div>
-      <ul ref={sortableRef} id="drop-items">
+      <div className="flex items-center mb-4">
+        <input
+          type="checkbox"
+          checked={selectAll}
+          onChange={handleSelectAll}
+          className="mr-2"
+        />
+        <button
+          className="ml-2 px-2 py-1 bg-gray-500 text-white text-sm font-semibold rounded-md"
+          onClick={deleteSelectedTodos}
+        >
+          Xóa tất cả
+        </button>
+      </div>
+      <ul ref={sortableRef} className="list-none p-0">
         {currentTodos.length > 0 ? (
-          currentTodos.map((todo, index) => {
-            if (!todo) {
-              console.error("Todo is undefined.");
-              return null;
-            }
-            return (
-              <li
-                key={todo.id}
-                className="flex items-center justify-between mb-2 border-b-2"
-              >
-                <div className="flex items-center">
-                  <span className="mr-4 text-gray-500">
-                    {indexOfFirstTodo + index + 1}.
+          currentTodos.map((todo, index) => (
+            <li
+              key={todo.id}
+              className="flex items-center justify-between mb-2 border-b-2"
+            >
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={selectedTodos.includes(todo.id)}
+                  onChange={() => handleTodoSelect(todo.id)}
+                  className="mr-2"
+                />
+                <span className="mr-4 text-gray-500">
+                  {indexOfFirstTodo + index + 1}.
+                </span>
+                {editingTodo === todo ? (
+                  <>
+                    <input
+                      type="text"
+                      className="border-gray-300 border rounded-lg mb-2 px-2 py-1 mr-2"
+                      value={editText}
+                      onChange={handleEditChange}
+                    />
+
+                    <MdSave
+                      size={22}
+                      className="bg-gray-500 text-white mb-2 p-[2px] rounded-md"
+                      onClick={saveEdit}
+                    />
+
+                    <MdClear
+                      size={22}
+                      className="bg-gray-500 text-white mb-2 p-[2px] rounded-md ml-2"
+                      onClick={cancelEdit}
+                    />
+                  </>
+                ) : (
+                  <span
+                    className={`my-2 text-sm italic ${
+                      todo.completed ? "line-through" : ""
+                    }`}
+                  >
+                    {todo.title}
                   </span>
-                  {editingTodo === todo ? (
-                    <>
-                      <input
-                        type="text"
-                        className="border-gray-300 border rounded-lg mb-2 px-2 py-1 mr-2"
-                        value={editText}
-                        onChange={handleEditChange}
-                      />
-
-                      <MdSave
-                        size={22}
-                        className="bg-gray-500 text-white mb-2 p-[2px] rounded-md"
-                        onClick={saveEdit}
-                      />
-
+                )}
+              </div>
+              <div className="flex gap-2">
+                {editingTodo !== todo && (
+                  <>
+                    {todo.completed ? (
                       <MdClear
                         size={22}
-                        className="bg-gray-500 text-white mb-2 p-[2px] rounded-md ml-2"
-                        onClick={cancelEdit}
+                        className="ml-2 p-1 text-gray-600 bg-gray-300 rounded-md cursor-pointer"
+                        onClick={() => toggleComplete(todo.id, todo.completed)}
                       />
-                    </>
-                  ) : (
-                    <span
-                      className={`my-2 text-sm italic ${
-                        todo.completed ? "line-through" : ""
-                      }`}
-                    >
-                      {todo.title}
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  {editingTodo !== todo && (
-                    <>
-                      {todo.completed ? (
-                        <MdClear
-                          size={22}
-                          className="ml-2 p-1 text-gray-600 bg-gray-300 rounded-md cursor-pointer"
-                          onClick={() => toggleComplete(todo.id, todo.completed)}
-                        />
-                      ) : (
-                        <MdDone
-                          size={22}
-                          className="ml-2 p-1 text-gray-600 bg-gray-300 rounded-md cursor-pointer"
-                          onClick={() => toggleComplete(todo.id, todo.completed)}
-                        />
-                      )}
-                      <MdEdit
+                    ) : (
+                      <MdDone
                         size={22}
                         className="ml-2 p-1 text-gray-600 bg-gray-300 rounded-md cursor-pointer"
-                        onClick={() => handleEdit(todo)}
+                        onClick={() => toggleComplete(todo.id, todo.completed)}
                       />
-                    </>
-                  )}
-                  <MdDelete
-                    size={22}
-                    className="text-gray-600 cursor-pointer p-1 rounded-md bg-gray-300"
-                    onClick={() => deleteTodo(todo.id)}
-                  />
-                </div>
-              </li>
-            );
-          })
+                    )}
+                    <MdEdit
+                      size={22}
+                      className="ml-2 p-1 text-gray-600 bg-gray-300 rounded-md cursor-pointer"
+                      onClick={() => handleEdit(todo)}
+                    />
+                  </>
+                )}
+                <MdDelete
+                  size={22}
+                  className="text-gray-600 cursor-pointer p-1 rounded-md bg-gray-300"
+                  onClick={() => deleteTodo(todo.id)}
+                />
+              </div>
+            </li>
+          ))
         ) : (
-          <p className='my-2 text-sm italic'>No todos found.</p>
+          <p>Không có công việc.</p>
         )}
       </ul>
 
       {/* Phân trang */}
       <ul className="flex justify-center mt-4">
-        {Array.from({ length: Math.ceil(filteredTodos.length / todosPerPage) }).map(
-          (_, index) => (
-            <li
-              key={index}
-              className={`mx-1 px-3 py-1 rounded-md cursor-pointer ${
-                currentPage === index + 1 ? "bg-blue-500 text-white" : "bg-gray-200"
-              }`}
-              onClick={() => paginate(index + 1)}
-            >
-              {index + 1}
-            </li>
-          )
-        )}
+        {Array.from({
+          length: Math.ceil(filteredTodos.length / todosPerPage),
+        }).map((_, index) => (
+          <li
+            key={index}
+            className={`mx-1 px-3 py-1 rounded-md cursor-pointer ${
+              currentPage === index + 1
+                ? "bg-blue-500 text-white"
+                : "bg-gray-200"
+            }`}
+            onClick={() => paginate(index + 1)}
+          >
+            {index + 1}
+          </li>
+        ))}
       </ul>
     </div>
   );
